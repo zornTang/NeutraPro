@@ -28,3 +28,6 @@ pretrain_model/models--Rostlab--prot_t5_xl_half_uniref50-enc/
 
 # 可选：忽略 debug 数据
 debug_data/
+
+# 忽略 MacOS系统生成的文件
+.DS_Store
