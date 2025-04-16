@@ -1,0 +1,30 @@
+# 忽略所有 h5 数据文件
+*.h5
+
+# 忽略所有 pkl 数据文件
+*.pkl
+
+# 忽略所有日志文件
+*.log
+
+# 忽略 TensorBoard 日志
+logs/
+*.tfevents.*
+
+# 忽略模型权重和结果输出
+result/
+*.pth
+
+# 忽略 Jupyter 检查点
+.ipynb_checkpoints/
+
+# 忽略 Python 编译文件
+*.pyc
+__pycache__/
+
+# 忽略预训练模型缓存
+pretrain_model/.locks/
+pretrain_model/models--Rostlab--prot_t5_xl_half_uniref50-enc/
+
+# 可选：忽略 debug 数据
+debug_data/
