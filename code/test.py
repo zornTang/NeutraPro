@@ -1,26 +1,63 @@
-import pandas as pd
-import matplotlib.pyplot as plt
+#!/usr/bin/env python3
+import gzip
+import re
+from Bio import SeqIO
+from itertools import islice
 
-# 修改为实际CSV文件的路径
-csv_file = "/data/qin2/chein/NeutraPro/code/PR-AUC.csv"
+# —— 1. 输入/输出文件路径 —— #
+gtf_path     = "../gencode.v47.annotation.gtf.gz"
+fasta_path   = "../gencode.v47.pc_translations.fa.gz"
+output_fasta = "../mane_proteins.fa"
 
-# 读取 CSV 文件
-df = pd.read_csv(csv_file)
+# —— 2. 从 GTF 中解析 MANE_Select / Ensembl_canonical 转录本 —— #
+pattern_gene = re.compile(r'gene_id "([^"]+)"')
+pattern_tid  = re.compile(r'transcript_id "([^"]+)"')
 
-# 假设 CSV 文件中第二列为 Epoch，第三列为 Loss
-epochs = df.iloc[:, 1]
-loss = df.iloc[:, 2]
+gene_mane      = {}  # gene_id -> transcript_id（MANE_Select）
+gene_canonical = {}  # gene_id -> transcript_id（Ensembl_canonical）
 
-# 绘制 loss 曲线图
-plt.figure(figsize=(8, 6))
-plt.plot(epochs, loss, label="Loss", marker='o')
-plt.xlabel("Epoch")
-plt.ylabel("PR-AUC")
-plt.title("PR-AUC Curve")
-plt.legend()
-plt.grid(True)
+with gzip.open(gtf_path, 'rt') as gtf:
+    for line in gtf:
+        if line.startswith("#") or "\ttranscript\t" not in line:
+            continue
 
-# 保存图片到指定路径，这里保存为 loss_curve.png
-plt.savefig("/data/qin2/chein/NeutraPro/result/PR-AUC.png", dpi=300)
+        if 'tag "MANE_Select"' in line:
+            g = pattern_gene.search(line).group(1)
+            t = pattern_tid.search(line).group(1)
+            gene_mane[g] = t
 
-plt.show()
+        elif 'tag "Ensembl_canonical"' in line:
+            g = pattern_gene.search(line).group(1)
+            t = pattern_tid.search(line).group(1)
+            # 仅当该基因尚无 MANE_Select 时使用 canonical 作为后备
+            if g not in gene_mane:
+                gene_canonical[g] = t
+
+# 合并优先级：MANE_Select > Ensembl_canonical
+selected_tids = set(gene_mane.values()) | set(gene_canonical.values())
+selected_base = {tid.split('.')[0] for tid in selected_tids}
+print(f"Selected {len(selected_tids)} transcripts (with versions), "
+      f"{len(selected_base)} base IDs (no versions).")
+
+# —— 3. Inspect and extract —— #
+with gzip.open(fasta_path, 'rt') as fasta_in, open(output_fasta, 'w') as fasta_out:
+    # 先看前 5 条，确认 rec.id 和 rec.description
+    for rec in islice(SeqIO.parse(fasta_in, "fasta"), 5):
+        print("HEADER:", rec.id, rec.description)
+    fasta_in.seek(0)
+
+    cnt = 0
+    for rec in SeqIO.parse(fasta_in, "fasta"):
+        # header 示例：ENSP...|ENST00000618323.5|ENSG...|...
+        parts = rec.id.split('|')
+        if len(parts) < 2:
+            continue
+        tid_full = parts[1]              # 带版本号的 transcript_id
+        tid_base = tid_full.split('.')[0]
+
+        if tid_full in selected_tids or tid_base in selected_base:
+            # print(f"MATCHED: {tid_full}")      # 验证匹配
+            SeqIO.write(rec, fasta_out, "fasta")
+            cnt += 1
+
+    print(f"Written {cnt} representative proteins to {output_fasta}.")
