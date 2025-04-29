@@ -46,18 +46,24 @@ def open_maybe_gz(path: Path, mode: str = "rt"):
 def parse_neutrophil_ids(tsv_path: Path, out_path: Path) -> Set[str]:
     """
     Read TSV, extract the 'Ensembl' column into a set of gene IDs,
-    write them (one per line) to out_path, and return the set.
+    write them (one per line) to out_path if provided, and return the set.
     """
     gene_ids: Set[str] = set()
     try:
-        with tsv_path.open(newline="") as fin, out_path.open("w") as fout:
+        with tsv_path.open(newline="") as fin:
             reader = csv.DictReader(fin, delimiter="\t")
             for row in reader:
                 gid = row.get("Ensembl")
                 if gid:
-                    fout.write(gid + "\n")
                     gene_ids.add(gid)
-        logging.info("Extracted %d neutrophil gene IDs to %s", len(gene_ids), out_path)
+        
+        # Only write to file if out_path is provided
+        if out_path is not None:
+            with out_path.open("w") as fout:
+                for gid in gene_ids:
+                    fout.write(gid + "\n")
+        
+        logging.info("Extracted %d neutrophil gene IDs", len(gene_ids))
     except Exception as e:
         logging.error("Failed to parse neutrophil IDs: %s", e)
         sys.exit(1)
@@ -141,7 +147,7 @@ def filter_proteins_by_genes(
     """
     count = 0
     try:
-        with input_fasta.open() as fin, out_fasta.open("w") as fout:
+        with open_maybe_gz(input_fasta, "rt") as fin, out_fasta.open("w") as fout:
             for rec in SeqIO.parse(fin, "fasta"):
                 parts = rec.id.split(HEADER_SEP)
                 if len(parts) < 3:
@@ -183,8 +189,8 @@ def main():
     parser.add_argument(
         "--out-dir",
         type=Path,
-        default=Path("output"),
-        help="Output directory for intermediate and final files (default: %(default)s)"
+        default=Path("../data/validation"),
+        help="Output directory for final file (default: %(default)s)"
     )
     parser.add_argument(
         "--log-level",
@@ -198,19 +204,14 @@ def main():
     args.out_dir.mkdir(parents=True, exist_ok=True)
 
     # Step 1: extract neutrophil gene IDs
-    neut_out = args.out_dir / "neutrophil_gene_ids.txt"
-    neut_ids = parse_neutrophil_ids(args.neut_tsv, neut_out)
+    neut_ids = parse_neutrophil_ids(args.neut_tsv, None)
 
     # Step 2: parse MANE transcript IDs
     mane_full, mane_base = parse_mane_transcripts(args.gtf)
 
-    # Step 3: extract MANE protein sequences
-    mane_fasta = args.out_dir / "mane_proteins.fa"
-    extract_mane_proteins(args.pc_fasta, mane_fasta, mane_full, mane_base)
-
-    # Step 4: filter by neutrophil gene IDs
+    # Step 3: extract and filter MANE protein sequences by neutrophil gene IDs
     filtered = args.out_dir / "neutrophil_mane_proteins.fa"
-    filter_proteins_by_genes(mane_fasta, neut_ids, filtered)
+    filter_proteins_by_genes(args.pc_fasta, neut_ids, filtered)
 
 
 if __name__ == "__main__":
