@@ -7,12 +7,7 @@
 # 忽略所有日志文件
 *.log
 
-# 忽略 TensorBoard 日志
-logs/
-*.tfevents.*
-
-# 忽略模型权重和结果输出
-result/
+# 忽略模型权重和结果输出文件
 *.pth
 
 # 忽略 Jupyter 检查点
@@ -25,9 +20,6 @@ __pycache__/
 # 忽略预训练模型缓存
 pretrain_model/.locks/
 pretrain_model/models--Rostlab--prot_t5_xl_half_uniref50-enc/
-
-# 可选：忽略 debug 数据
-debug_data/
 
 # 忽略 MacOS系统生成的文件
 .DS_Store
