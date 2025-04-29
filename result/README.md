@@ -1,1 +1,1 @@
-存放模型的输出结果
+This folder is used to store the output results of the model.

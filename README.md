@@ -1,1 +1,1 @@
-it's my master project.
+This is the master project.
