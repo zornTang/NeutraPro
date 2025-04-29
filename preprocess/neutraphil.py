@@ -165,19 +165,19 @@ def main():
     parser.add_argument(
         "--neut-tsv",
         type=Path,
-        default=Path("../immune_cell_category_rna_neutrophil_Immune.tsv"),
+        default=Path("../data/validation/immune_cell_category_rna_neutrophil_Immune.tsv"),
         help="TSV file with neutrophil Ensembl gene IDs (default: %(default)s)"
     )
     parser.add_argument(
         "--gtf",
         type=Path,
-        default=Path("../gencode.v47.annotation.gtf.gz"),
+        default=Path("../data/validation/gencode.v47.annotation.gtf.gz"),
         help="GTF file (gzipped or plain) with MANE tags (default: %(default)s)"
     )
     parser.add_argument(
         "--pc-fasta",
         type=Path,
-        default=Path("../gencode.v47.pc_translations.fa.gz"),
+        default=Path("../data/validation/gencode.v47.pc_translations.fa.gz"),
         help="Protein‑coding FASTA (gzipped or plain) (default: %(default)s)"
     )
     parser.add_argument(
