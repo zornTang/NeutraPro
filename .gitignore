@@ -26,3 +26,11 @@ pretrain_model/models--Rostlab--prot_t5_xl_half_uniref50-enc/
 
 # 忽略 TensorBoard 日志文件
 logs/events.out.tfevents.*
+
+# 忽略大型数据文件
+*.tsv
+data/train/gnomad*.tsv
+data/train/gnomad*.csv
+
+# 忽略 VS Code 配置文件
+.vscode/

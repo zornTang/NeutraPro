@@ -1,63 +1,31 @@
-#!/usr/bin/env python3
-import gzip
-import re
-from Bio import SeqIO
-from itertools import islice
+import pandas as pd
+from mygene import MyGeneInfo
 
-# —— 1. 输入/输出文件路径 —— #
-gtf_path     = "../gencode.v47.annotation.gtf.gz"
-fasta_path   = "../gencode.v47.pc_translations.fa.gz"
-output_fasta = "../mane_proteins.fa"
+# 1. 读取数据
+df = pd.read_csv('../gnomad.v4.1.constraint_metrics.tsv', sep='\t')  # 修改为你的文件名和分隔符
 
-# —— 2. 从 GTF 中解析 MANE_Select / Ensembl_canonical 转录本 —— #
-pattern_gene = re.compile(r'gene_id "([^"]+)"')
-pattern_tid  = re.compile(r'transcript_id "([^"]+)"')
+# 2. 统一gene_id为ENSEMBL ID
+mg = MyGeneInfo()
+gene_ids = df['gene_id'].astype(str).tolist()
+query = mg.querymany(gene_ids, scopes=['ensembl.gene', 'symbol'], fields='ensembl.gene', species='human')
+id_map = {}
+for item in query:
+    if 'ensembl' in item:
+        if isinstance(item['ensembl'], list):
+            id_map[item['query']] = item['ensembl'][0]['gene']
+        else:
+            id_map[item['query']] = item['ensembl']['gene']
+    else:
+        id_map[item['query']] = None
 
-gene_mane      = {}  # gene_id -> transcript_id（MANE_Select）
-gene_canonical = {}  # gene_id -> transcript_id（Ensembl_canonical）
+df['ensembl_id'] = df['gene_id'].map(id_map)
+df = df.dropna(subset=['ensembl_id'])
 
-with gzip.open(gtf_path, 'rt') as gtf:
-    for line in gtf:
-        if line.startswith("#") or "\ttranscript\t" not in line:
-            continue
+# 3. 筛选mane_select为true
+df = df[df['canonical'] == True]
 
-        if 'tag "MANE_Select"' in line:
-            g = pattern_gene.search(line).group(1)
-            t = pattern_tid.search(line).group(1)
-            gene_mane[g] = t
+# 4. 提取lof.oe_ci.upper列，并删除缺失值
+result = df[['ensembl_id', 'lof.oe_ci.upper']].dropna()
 
-        elif 'tag "Ensembl_canonical"' in line:
-            g = pattern_gene.search(line).group(1)
-            t = pattern_tid.search(line).group(1)
-            # 仅当该基因尚无 MANE_Select 时使用 canonical 作为后备
-            if g not in gene_mane:
-                gene_canonical[g] = t
-
-# 合并优先级：MANE_Select > Ensembl_canonical
-selected_tids = set(gene_mane.values()) | set(gene_canonical.values())
-selected_base = {tid.split('.')[0] for tid in selected_tids}
-print(f"Selected {len(selected_tids)} transcripts (with versions), "
-      f"{len(selected_base)} base IDs (no versions).")
-
-# —— 3. Inspect and extract —— #
-with gzip.open(fasta_path, 'rt') as fasta_in, open(output_fasta, 'w') as fasta_out:
-    # 先看前 5 条，确认 rec.id 和 rec.description
-    for rec in islice(SeqIO.parse(fasta_in, "fasta"), 5):
-        print("HEADER:", rec.id, rec.description)
-    fasta_in.seek(0)
-
-    cnt = 0
-    for rec in SeqIO.parse(fasta_in, "fasta"):
-        # header 示例：ENSP...|ENST00000618323.5|ENSG...|...
-        parts = rec.id.split('|')
-        if len(parts) < 2:
-            continue
-        tid_full = parts[1]              # 带版本号的 transcript_id
-        tid_base = tid_full.split('.')[0]
-
-        if tid_full in selected_tids or tid_base in selected_base:
-            # print(f"MATCHED: {tid_full}")      # 验证匹配
-            SeqIO.write(rec, fasta_out, "fasta")
-            cnt += 1
-
-    print(f"Written {cnt} representative proteins to {output_fasta}.")
+# 5. 输出txt文件
+result.to_csv('ensembl_loeuf.txt', sep='\t', index=False, header=False)
