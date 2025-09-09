@@ -135,6 +135,45 @@ def clean_protein_data(input_file: str, output_file: str = None, remove_blanks: 
     
     return df
 
+def classify_terminator_codons(df: pd.DataFrame):
+    """
+    Classify sequences based on presence of terminator codons (*) and remove all stop codons.
+    
+    Args:
+        df: DataFrame containing protein sequences
+        
+    Returns:
+        df: DataFrame with terminator classification and cleaned sequences
+    """
+    print("\nClassifying sequences by terminator codon presence...")
+    
+    # Create classification column
+    # 1 = has terminator codon (*), 0 = no terminator codon
+    df['has_terminator'] = df['protein_sequence'].str.contains('*', na=False, regex=False).astype(int)
+    
+    # Add descriptive label
+    df['terminator_label'] = df['has_terminator'].map({1: 'with_terminator', 0: 'without_terminator'})
+    
+    # Count statistics before cleaning
+    with_terminator = (df['has_terminator'] == 1).sum()
+    without_terminator = (df['has_terminator'] == 0).sum()
+    
+    print(f"Sequences with terminator codon (*): {with_terminator} ({with_terminator/len(df)*100:.1f}%)")
+    print(f"Sequences without terminator codon: {without_terminator} ({without_terminator/len(df)*100:.1f}%)")
+    
+    # Remove all stop codons from sequences
+    print("Removing all stop codons (*) from protein sequences...")
+    df['protein_sequence_cleaned'] = df['protein_sequence'].str.replace('*', '', regex=False)
+    
+    # Show sequence length changes
+    original_lengths = df['protein_sequence'].str.len()
+    cleaned_lengths = df['protein_sequence_cleaned'].str.len()
+    removed_codons = original_lengths - cleaned_lengths
+    
+    print(f"Stop codons removed per sequence - Mean: {removed_codons.mean():.2f}, Max: {removed_codons.max()}")
+    
+    return df
+
 def classify_proteins_by_loeuf(input_file: str, output_file: str = None, loeuf_threshold: float = 0.6):
     """
     Classify proteins as essential or non-essential based on LOEUF values.
@@ -211,6 +250,8 @@ def main():
     parser.add_argument('--classify-loeuf', action='store_true', help='Classify proteins by LOEUF values (essential vs non-essential)')
     parser.add_argument('--loeuf-threshold', type=float, default=0.6, help='LOEUF threshold for classification (default: 0.6)')
     parser.add_argument('--loeuf-only', action='store_true', help='Only perform LOEUF classification without data cleaning')
+    parser.add_argument('--classify-terminator', action='store_true', help='Classify sequences by terminator codon presence and remove stop codons')
+    parser.add_argument('--terminator-only', action='store_true', help='Only perform terminator classification without data cleaning')
     
     args = parser.parse_args()
     
@@ -222,6 +263,21 @@ def main():
     if args.loeuf_only:
         try:
             classify_proteins_by_loeuf(args.input_file, args.output, args.loeuf_threshold)
+        except Exception as e:
+            print(f"Error: {e}")
+            sys.exit(1)
+        return
+    
+    # If only terminator classification is requested
+    if args.terminator_only:
+        try:
+            df = pd.read_csv(args.input_file)
+            df = classify_terminator_codons(df)
+            
+            output_file = args.output if args.output else args.input_file.replace('.csv', '_terminator_classified.csv')
+            print(f"Saving terminator-classified data to {output_file}...")
+            df.to_csv(output_file, index=False)
+            print("Terminator classification completed successfully!")
         except Exception as e:
             print(f"Error: {e}")
             sys.exit(1)
@@ -282,6 +338,12 @@ def main():
         # Perform data cleaning first
         df_cleaned = clean_protein_data(args.input_file, args.output, remove_blanks, remove_duplicates, remove_incomplete)
         
+        # If terminator classification is requested
+        if args.classify_terminator:
+            print("\n" + "="*50)
+            print("Starting terminator codon classification...")
+            df_cleaned = classify_terminator_codons(df_cleaned)
+        
         # If LOEUF classification is also requested
         if args.classify_loeuf:
             print("\n" + "="*50)
@@ -292,6 +354,13 @@ def main():
             final_output = output_file.replace('.csv', '_classified.csv')
             
             classify_proteins_by_loeuf(output_file, final_output, args.loeuf_threshold)
+        elif args.classify_terminator:
+            # Save the terminator-classified data
+            output_file = args.output if args.output else args.input_file
+            final_output = output_file.replace('.csv', '_terminator_classified.csv')
+            print(f"\nSaving terminator-classified data to {final_output}...")
+            df_cleaned.to_csv(final_output, index=False)
+            print("Terminator classification completed successfully!")
             
     except Exception as e:
         print(f"Error: {e}")
